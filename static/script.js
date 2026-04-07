@@ -392,13 +392,4 @@ document.addEventListener("DOMContentLoaded", () => {
             btnGenerate.textContent = "Cipta Template PDF";
         }, 50); // Delay sikit bagi masa UI update
     });
-
-        // Selesai & Muat Turun
-        doc.save('Template_Phenakistoscope.pdf');
-        
-        statusText.textContent = "✅ Berjaya! PDF dijana sepenuhnya dalam browser.";
-        statusText.style.color = "#2ecc71";
-        btnGenerate.disabled = false;
-        btnGenerate.textContent = "Cipta Template PDF";
-    });
 });
