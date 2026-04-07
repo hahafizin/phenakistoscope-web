@@ -292,7 +292,7 @@ document.addEventListener("DOMContentLoaded", () => {
         sliderTrack.style.background = `linear-gradient(to right, #ddd ${percentStart}%, #4A90E2 ${percentStart}%, #4A90E2 ${percentEnd}%, #ddd ${percentEnd}%)`;
     }
 
-    // --- LOGIK JANA PDF (PURE JS) ---
+   // --- 5. JANA PDF (Guna High-Res Canvas untuk Elak pepijat jsPDF) ---
     btnGenerate.addEventListener('click', () => {
         if (extractedFrames.length === 0) {
             alert("Sila muat naik video dan tunggu extraction selesai.");
@@ -304,61 +304,94 @@ document.addEventListener("DOMContentLoaded", () => {
         
         btnGenerate.disabled = true;
         btnGenerate.textContent = "Menjana PDF...";
-        statusText.textContent = "Sedang menjana PDF di dalam browser awak (tanpa server)...";
+        statusText.textContent = "Sedang melukis kanvas resolusi tinggi (300 DPI)...";
         statusText.style.color = "#4A90E2";
 
-        // Cipta Dokumen A4 (Portrait, unit: mm)
-        const doc = new jsPDF('p', 'mm', 'a4');
-        
-        const diameterCm = parseFloat(inputDiameter.value) || 20;
-        const slices = parseInt(inputSlices.value) || 8;
-        const scale = parseFloat(inputScale.value) || 1.0;
-        const edgeDistCm = parseFloat(inputDistance.value) || 1.0;
+        // Guna setTimeout supaya UI tidak 'freeze' dan mesej statusText sempat keluar
+        setTimeout(() => {
+            // Trik Arkitek: Gunakan Canvas Off-screen untuk lakar gambar
+            // Kertas A4 = 210mm x 297mm
+            const dpi = 300;
+            const pxPerMm = dpi / 25.4;
+            const a4W_px = 210 * pxPerMm; // Lebih kurang 2480 px
+            const a4H_px = 297 * pxPerMm; // Lebih kurang 3508 px
 
-        const centerX = 210 / 2; // Tengah kertas A4 (mm)
-        const centerY = 297 / 2; // Tengah kertas A4 (mm)
-        const radiusMm = (diameterCm * 10) / 2;
+            const exportCanvas = document.createElement('canvas');
+            exportCanvas.width = a4W_px;
+            exportCanvas.height = a4H_px;
+            const eCtx = exportCanvas.getContext('2d');
 
-        // Lukis Bulatan & Titik Tengah
-        doc.setLineWidth(0.5);
-        doc.circle(centerX, centerY, radiusMm, 'S');
-        doc.setFillColor(0, 0, 0);
-        doc.circle(centerX, centerY, 1, 'F'); // Titik paksi
+            // Latar putih
+            eCtx.fillStyle = '#ffffff';
+            eCtx.fillRect(0, 0, a4W_px, a4H_px);
 
-        // Susun Gambar dalam Bulatan
-        const baseImageHeightMm = radiusMm * 0.35;
-        const frameHMm = baseImageHeightMm * scale;
-        const frameWMm = frameHMm * (9 / 16);
-        const edgeDistMm = edgeDistCm * 10;
-        const distFromCenter = radiusMm - edgeDistMm - (frameHMm / 2);
+            const diameterCm = parseFloat(inputDiameter.value) || 20;
+            const slices = parseInt(inputSlices.value) || 8;
+            const scale = parseFloat(inputScale.value) || 1.0;
+            const edgeDistCm = parseFloat(inputDistance.value) || 1.0;
 
-        const angleStep = 360 / slices;
+            const centerX = a4W_px / 2; 
+            const centerY = a4H_px / 2; 
+            const radiusPx = (diameterCm * 10) * pxPerMm / 2;
 
-        for (let i = 0; i < slices; i++) {
-            const angleDeg = i * angleStep;
-            const angleRad = (angleDeg * Math.PI) / 180;
+            eCtx.save();
+            eCtx.translate(centerX, centerY);
 
-            // Kira kedudukan pusat kotak gambar
-            const posX = centerX + distFromCenter * Math.sin(angleRad);
-            const posY = centerY - distFromCenter * Math.cos(angleRad);
+            // Lukis Bulatan & Titik Tengah
+            eCtx.beginPath();
+            eCtx.arc(0, 0, radiusPx, 0, 2 * Math.PI);
+            eCtx.strokeStyle = '#000000';
+            eCtx.lineWidth = 4; // Ketebalan garisan untuk cetakan
+            eCtx.stroke();
 
-            if (extractedFrames[i]) {
-                const imgData = extractedFrames[i].src;
+            eCtx.beginPath();
+            eCtx.arc(0, 0, 15, 0, 2 * Math.PI);
+            eCtx.fillStyle = '#000000';
+            eCtx.fill();
 
-                // Masukkan gambar ke PDF dengan putaran
-                doc.addImage(
-                    imgData, 
-                    'JPEG', 
-                    posX - (frameWMm / 2), 
-                    posY - (frameHMm / 2), 
-                    frameWMm, 
-                    frameHMm, 
-                    undefined, 
-                    'FAST', 
-                    angleDeg + 180 // Pusing 180 + sudut kedudukan
-                );
+            const baseImageHeight = radiusPx * 0.35;
+            const frameH = baseImageHeight * scale;
+            const frameW = frameH * (9 / 16);
+            const edgeDistPx = (edgeDistCm * 10) * pxPerMm;
+            const distFromCenter = radiusPx - edgeDistPx - (frameH / 2);
+
+            const angleStep = (2 * Math.PI) / slices;
+
+            for (let i = 0; i < slices; i++) {
+                eCtx.save();
+                eCtx.rotate(i * angleStep);
+                
+                const boxY = -distFromCenter - (frameH / 2);
+                const boxX = -(frameW / 2);
+
+                if (extractedFrames[i]) {
+                    eCtx.save();
+                    eCtx.translate(boxX + frameW/2, boxY + frameH/2);
+                    eCtx.rotate(Math.PI); // Pusing 180 darjah
+                    eCtx.drawImage(extractedFrames[i], -frameW/2, -frameH/2, frameW, frameH);
+                    eCtx.restore();
+                }
+                eCtx.restore();
             }
-        }
+            eCtx.restore(); 
+
+            // Tukar Kanvas menjadi PDF menggunakan jsPDF
+            statusText.textContent = "Sedang menyusun fail PDF...";
+            
+            // Kualiti 0.85 memberikan saiz fail optimum dengan kualiti cetakan cemerlang
+            const imgData = exportCanvas.toDataURL('image/jpeg', 0.85); 
+            const doc = new jsPDF('p', 'mm', 'a4');
+            
+            // Masukkan sekeping gambar besar ini tepat mengikut saiz A4
+            doc.addImage(imgData, 'JPEG', 0, 0, 210, 297);
+            doc.save('Template_Phenakistoscope.pdf');
+            
+            statusText.textContent = "✅ Berjaya! PDF dijana sepenuhnya dalam browser.";
+            statusText.style.color = "#2ecc71";
+            btnGenerate.disabled = false;
+            btnGenerate.textContent = "Cipta Template PDF";
+        }, 50); // Delay sikit bagi masa UI update
+    });
 
         // Selesai & Muat Turun
         doc.save('Template_Phenakistoscope.pdf');
